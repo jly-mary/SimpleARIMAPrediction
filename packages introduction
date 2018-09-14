@@ -1,0 +1,119 @@
+import pandas as pd         #DataFrame : reading time_series(TS) data
+import numpy as np          #caculate data in TS
+import matplotlib.pylab as plt #using it to plot a lot of different types pictures
+import seaborn as sns          #about some color setting and some other types plot
+import statsmodels.api as sm   #0.8.0version's import, otherwise the Seasonal ARIMA(SARIMA) model can't be applied
+from statsmodels.tsa.stattools import adfuller  #ADF： unit_root_test toconfirm whether a TS is a stationary TS
+from statsmodels.tsa.seasonal import seasonal_decompose  #decompose a TS to determine its trend, seasonal_trend and residual 
+import itertools
+
+#estimate TS's statinary （mean and standard deviation）
+def test_stationary(TS , title = ''):
+    #determing rolling statistics 
+    rolmean = pd.Series.rolling(TS , window = 12).mean() 
+    rolstd = pd.Series.rolling(TS , window = 12).std()
+    orgin = plt.plot(TS, label='original' , color='blue')
+    mean = plt.plot(rolmean, label='rol_mean' , color='red')
+    std = plt.plot(rolstd , label = 'rol_std' , color = 'black')
+    plt.legend()
+    plt.title(title)
+    plt.show()
+    #perform DF test
+    print ('Results of Dickey-Fuller Test:')
+    dftest = adfuller(TS , autolag ='AIC') #the number of lags is chosen to minimize the corresponding information criterium
+    df_output = pd.Series(dftest[0:4], index=['test statistic' , 'p-value' , '#lags used','Number of observations used'])
+    for key,value in dftest[4].items():
+        df_output['Critical Value (%s)' %key] = value         
+    print (df_output)
+    
+#read data
+# data = pd.read_csv('AirPassengers.csv') #this step can see the format of raw_data  
+# print (data.head(2))
+dateparse = lambda dates: pd.datetime.strptime(dates , '%Y-%m') #transform format like 'dates' to '1960-01'(year-month) 
+data = pd.read_csv('AirPassengers.csv', index_col='Month', date_parser=dateparse) #reading data and using 'Month' column as index, set datetime format 
+# orgin = plt.plot(data, label='original' , color='blue') #plot the raw_data and preliminarily see it's stationary 
+# plt.show()  #see it has decreasing trend 
+#print(type(data))  #data's format is DataFrame
+#print (data.head(2))
+Ts = data['#Passengers']  #transform DataFrame to TimeSeries format
+#print(type(Ts))  
+#print (Ts.head(2))
+#test_stationary(Ts)  
+            '''
+            Results of Dickey-Fuller Test:
+            test statistic                   0.815369
+            p-value                          0.991880
+            #lags used                      13.000000
+            Number of observations used    130.000000
+            Critical Value (1%)             -3.481682
+            Critical Value (5%)             -2.884042
+            Critical Value (10%)            -2.578770
+            dtype: float64
+            ''' from "p-value" isnit close to 0 and "test statistic" is bigger than three "Critical Value", so the raw TS is not stationary
+       
+#using log transform to eliminate partical trend
+Ts_log = np.log(Ts)
+#test_stationary(Ts_log , 'data log')
+            '''
+            Results of Dickey-Fuller Test:
+            test statistic                  -1.717017
+            p-value                          0.422367
+            #lags used                      13.000000
+            Number of observations used    130.000000
+            Critical Value (1%)             -3.481682
+            Critical Value (5%)             -2.884042
+            Critical Value (10%)            -2.578770
+            ''' same as above, be more stationary, but the "test statistic" is still bigger
+           
+#using first difference
+Ts_log_diff = Ts_log - Ts_log.shift(1)  #1-difference
+Ts_log_diff.dropna(inplace = True)      #remove Nan items
+test_stationary(Ts_log_diff ,'data log_diff')
+            '''
+            Results of Dickey-Fuller Test:
+            test statistic                  -2.717131
+            p-value                          0.071121
+            #lags used                      14.000000
+            Number of observations used    128.000000
+            Critical Value (1%)             -3.482501
+            Critical Value (5%)             -2.884398
+            Critical Value (10%)            -2.578960
+            ''' same analysis as above
+            
+seasonal_trend(Ts_log_diff , title = 'data log_diff trend_seasonal_resid') 
+#see it's components (Trend , seasonal, residual) should minus seasonal component
+           
+#seasonal difference()
+Ts_log_diff_season = Ts_log_diff - Ts_log_diff.shift(12) #参数从6-12
+Ts_log_diff_season.dropna(inplace = True)
+test_stationary(Ts_log_diff_season)
+            '''
+            Results of Dickey-Fuller Test:
+            test statistic                  -4.443325
+            p-value                          0.000249
+            #lags used                      12.000000
+            Number of observations used    118.000000
+            Critical Value (1%)             -3.487022
+            Critical Value (5%)             -2.886363
+            Critical Value (10%)            -2.580009
+            '''
+ts_plot(Ts_log_diff_season , lags = 30, title = 'AirPassengers log_diff_seasonal')          
+#ACF is truncated after 1, PACF is truncated after 1, so ARIMA(p=1,d=1,q=1)
+#lag=12 ACF is negative,so the SARIMA(P, D, Q, S) Q = 1,D=1(1 seasonal difference),S=12
+
+#model fit
+model = sm.tsa.statespace.SARIMAX(Ts , order = (1 , 1 , 1) , seasonal_order =(0 , 1 , 1 , 12) )
+model_results = model.fit()
+print(model_results.summary())
+
+#residual analysis (normal distribution and QQ plot)
+model_results.plot_diagnostics(figsize = (16 , 12))
+plt.show()
+
+#prediction
+predict_Ts = results.predict()#(start = 100 , end = 200)
+predict_Ts.plot(color='blue', label='Predict')
+Ts.plot(color='red', label='Original')
+plt.legend(loc='best')
+plt.title('RMSE: %.4f'% np.sqrt(sum((predict_Ts - Ts)**2)/Ts.size))
+plt.show()
