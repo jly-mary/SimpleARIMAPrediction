@@ -111,7 +111,7 @@ model_results.plot_diagnostics(figsize = (16 , 12))
 plt.show()
 
 #prediction
-predict_Ts = results.predict()#(start = 100 , end = 200)
+predict_Ts = model_results.predict()#(start = 100 , end = 200)
 predict_Ts.plot(color='blue', label='Predict')
 Ts.plot(color='red', label='Original')
 plt.legend(loc='best')
